@@ -1,67 +1,179 @@
 <!DOCTYPE html>
 <html>
 <head>
+    <meta charset="UTF-8">
     <title>BeautyBook</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
+        :root {
+            --primary: #007bff;
+            --error: #dc3545;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f8f9fa;
+        }
+
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
         .loader {
             border: 4px solid #f3f3f3;
-            border-top: 4px solid #3498db;
+            border-top: 4px solid var(--primary);
             border-radius: 50%;
-            width: 30px;
-            height: 30px;
+            width: 40px;
+            height: 40px;
             animation: spin 1s linear infinite;
             margin: 20px auto;
         }
+
+        .status {
+            text-align: center;
+            color: #6c757d;
+            margin: 20px 0;
+        }
+
+        .error {
+            color: var(--error);
+            text-align: center;
+            padding: 15px;
+            border: 1px solid var(--error);
+            border-radius: 5px;
+            margin: 20px;
+        }
+
+        .hidden {
+            display: none;
+        }
+
         @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+
+        .main-interface {
+            animation: fadeIn 0.5s ease-in;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
     </style>
 </head>
 <body>
-    <div id="app">
-        <div class="loader"></div>
-        <div id="status">Идет авторизация...</div>
+    <div class="container">
+        <!-- Состояние загрузки -->
+        <div id="loading">
+            <div class="loader"></div>
+            <div class="status" id="status">Идет авторизация...</div>
+        </div>
+
+        <!-- Состояние ошибки -->
+        <div id="error" class="error hidden">
+            <div id="error-text"></div>
+            <button onclick="window.location.reload()" style="margin-top: 10px;">
+                Попробовать снова
+            </button>
+        </div>
+
+        <!-- Основной интерфейс -->
+        <div id="main" class="main-interface hidden">
+            <h1>Добро пожаловать!</h1>
+            <div id="content">
+                <!-- Здесь будет основной контент -->
+            </div>
+        </div>
     </div>
 
     <script>
         const tg = window.Telegram.WebApp;
-        const backendUrl = 'http://localhost:8000';  # Локальный адрес бэкенда
-        
-        async function initApp() {
-            try {
-                // Получение параметров из URL
-                const urlParams = new URLSearchParams(window.location.search);
-                const initData = urlParams.get('initData');
-                const hash = urlParams.get('hash');
+        const backendUrl = 'http://localhost:8000'; // Для продакшена заменить на реальный URL
 
-                // Отправка запроса на бэкенд
+        // Элементы интерфейса
+        const elements = {
+            loading: document.getElementById('loading'),
+            error: document.getElementById('error'),
+            main: document.getElementById('main'),
+            status: document.getElementById('status'),
+            errorText: document.getElementById('error-text')
+        }
+
+        // Параметры URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const initData = urlParams.get('init_data');
+        const hash = urlParams.get('hash');
+
+        // Инициализация приложения
+        function initApp() {
+            tg.expand();
+            tg.enableClosingConfirmation();
+            
+            if (!initData || !hash) {
+                showError('Отсутствуют параметры авторизации');
+                return;
+            }
+
+            authenticateUser();
+        }
+
+        // Аутентификация пользователя
+        async function authenticateUser() {
+            try {
+                elements.status.textContent = 'Проверка подписи...';
+                
                 const response = await fetch(`${backendUrl}/api/auth`, {
                     method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ init_data: initData, hash: hash })
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        init_data: initData,
+                        hash: hash
+                    })
                 });
 
                 if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
+                    const error = await response.json();
+                    throw new Error(error.detail || 'Ошибка сервера');
                 }
 
                 const data = await response.json();
-                
-                // Обновление интерфейса
-                document.getElementById('app').innerHTML = `
-                    <h1>Добро пожаловать, пользователь #${data.user_id}!</h1>
-                    <!-- Основной интерфейс -->
-                `;
-                
-                tg.MainButton.show().setText('Мой профиль');
+                showMainInterface(data.user_id);
                 
             } catch (error) {
-                document.getElementById('status').textContent = 'Ошибка авторизации!';
-                tg.showAlert(error.message);
-                tg.close();
+                console.error('Auth error:', error);
+                showError(error.message);
             }
+        }
+
+        // Показать основной интерфейс
+        function showMainInterface(userId) {
+            elements.loading.classList.add('hidden');
+            elements.main.classList.remove('hidden');
+            
+            // Загрузка данных пользователя
+            elements.content.innerHTML = `
+                <div class="user-info">
+                    <h3>ID пользователя: ${userId}</h3>
+                    <p>Добро пожаловать в BeautyBook!</p>
+                </div>
+            `;
+            
+            tg.MainButton.setText('Мой профиль').show();
+        }
+
+        // Показать ошибку
+        function showError(message) {
+            elements.loading.classList.add('hidden');
+            elements.error.classList.remove('hidden');
+            elements.errorText.textContent = message;
+            tg.MainButton.hide();
         }
 
         // Инициализация при загрузке
