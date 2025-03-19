@@ -68,13 +68,11 @@
 </head>
 <body>
     <div class="container">
-        <!-- Состояние загрузки -->
         <div id="loading">
             <div class="loader"></div>
             <div class="status" id="status">Идет авторизация...</div>
         </div>
 
-        <!-- Состояние ошибки -->
         <div id="error" class="error hidden">
             <div id="error-text"></div>
             <button onclick="window.location.reload()" style="margin-top: 10px;">
@@ -82,104 +80,100 @@
             </button>
         </div>
 
-        <!-- Основной интерфейс -->
         <div id="main" class="main-interface hidden">
             <h1>Добро пожаловать!</h1>
-            <div id="content">
-                <!-- Здесь будет основной контент -->
-            </div>
+            <div id="content"></div>
         </div>
     </div>
 
     <script>
-        const tg = window.Telegram.WebApp;
-        const backendUrl = 'https://dumbly-miraculous-chamois.cloudpub.ru'; // Для продакшена заменить на реальный URL
+        // Ожидаем полной загрузки DOM
+        document.addEventListener('DOMContentLoaded', () => {
+            const tg = window.Telegram.WebApp;
+            const backendUrl = 'https://dumbly-miraculous-chamois.cloudpub.ru';
 
-        // Элементы интерфейса
-        const elements = {
-            loading: document.getElementById('loading'),
-            error: document.getElementById('error'),
-            main: document.getElementById('main'),
-            status: document.getElementById('status'),
-            errorText: document.getElementById('error-text'),
-            content: document.getElementById('content')
-        }
+            // Элементы интерфейса
+            const elements = {
+                loading: document.getElementById('loading'),
+                error: document.getElementById('error'),
+                main: document.getElementById('main'),
+                status: document.getElementById('status'),
+                errorText: document.getElementById('error-text'),
+                content: document.getElementById('content')
+            };
 
-        // Параметры URL
-        const urlParams = new URLSearchParams(window.location.search);
-        const initData = urlParams.get('init_data');
-        const hash = urlParams.get('hash');
+            // Параметры URL
+            const urlParams = new URLSearchParams(window.location.search);
+            const initData = urlParams.get('init_data');
+            const hash = urlParams.get('hash');
 
-        // Инициализация приложения
-        function initApp() {
-            tg.expand();
-            tg.enableClosingConfirmation();
-            
-            if (!initData || !hash) {
-                showError('Отсутствуют параметры авторизации');
-                return;
-            }
-
-            authenticateUser();
-        }
-
-        // Аутентификация пользователя
-        async function authenticateUser() {
-            try {
-                elements.status.textContent = 'Проверка подписи...';
+            // Инициализация приложения
+            function initApp() {
+                tg.expand();
+                tg.enableClosingConfirmation();
                 
-                const response = await fetch(`${backendUrl}/api/auth`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        init_data: initData,
-                        hash: hash
-                    })
-                });
-
-                if (!response.ok) {
-                    const error = await response.json();
-                    throw new Error(error.detail || 'Ошибка сервера');
+                if (!initData || !hash) {
+                    showError('Отсутствуют параметры авторизации');
+                    return;
                 }
 
-                const data = await response.json();
-                showMainInterface(data.user_id);
-                
-            } catch (error) {
-                console.error('Auth error:', error);
-                showError(error.message);
+                authenticateUser();
             }
-        }
 
-        // Показать основной интерфейс
-        function showMainInterface(userId) {
-            elements.loading.classList.add('hidden');
-            elements.main.classList.remove('hidden');
-            
-            // Загрузка данных пользователя
-            elements.content.innerHTML = `
-                <div class="user-info">
-                    <h3>ID пользователя: ${userId}</h3>
-                    <p>Добро пожаловать в BeautyBook!</p>
-                </div>
-            `;
-            
-            tg.MainButton.setText('Мой профиль').show();
-        }
+            // Аутентификация
+            async function authenticateUser() {
+                try {
+                    elements.status.textContent = 'Проверка подписи...';
+                    
+                    const response = await fetch(`${backendUrl}/api/auth`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ init_data: initData, hash: hash })
+                    });
 
-        // Показать ошибку
-        function showError(message) {
-            elements.loading.classList.add('hidden');
-            elements.error.classList.remove('hidden');
-            elements.errorText.textContent = message;
-            tg.MainButton.hide();
-        }
+                    if (!response.ok) {
+                        const error = await response.json();
+                        throw new Error(error.detail || 'Ошибка сервера');
+                    }
 
-        // Инициализация при загрузке
-        tg.ready();
-        initApp();
+                    const data = await response.json();
+                    showMainInterface(data.user_id);
+
+                } catch (error) {
+                    console.error('Ошибка:', error);
+                    showError(error.message || 'Неизвестная ошибка');
+                }
+            }
+
+            // Основной интерфейс
+            function showMainInterface(userId) {
+                elements.loading.classList.add('hidden');
+                elements.main.classList.remove('hidden');
+                
+                elements.content.innerHTML = `
+                    <div class="user-info">
+                        <h3>ID: ${userId}</h3>
+                        <p>Добро пожаловать!</p>
+                    </div>
+                `;
+
+                tg.MainButton.setText('Профиль').show().onClick(() => {
+                    tg.showAlert('Функционал в разработке 🛠️');
+                });
+            }
+
+            // Обработка ошибок
+            function showError(message) {
+                elements.loading.classList.add('hidden');
+                elements.error.classList.remove('hidden');
+                elements.errorText.textContent = message;
+                tg.MainButton.hide();
+            }
+
+            // Запуск
+            tg.ready();
+            initApp();
+        });
     </script>
 </body>
 </html>
