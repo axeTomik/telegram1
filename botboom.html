@@ -8,6 +8,8 @@
         :root {
             --primary: #007bff;
             --error: #dc3545;
+            --success: #28a745;
+            --text: #2c3e50;
         }
 
         body {
@@ -15,6 +17,7 @@
             margin: 0;
             padding: 20px;
             background: #f8f9fa;
+            color: var(--text);
         }
 
         .container {
@@ -51,13 +54,43 @@
             display: none;
         }
 
+        .main-interface {
+            animation: fadeIn 0.5s ease-in;
+        }
+
+        .section {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 15px 0;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .button {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: 0.3s;
+        }
+
+        .button:hover {
+            opacity: 0.9;
+        }
+
+        input, select {
+            width: 100%;
+            padding: 10px;
+            margin: 8px 0;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+
         @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
-        }
-
-        .main-interface {
-            animation: fadeIn 0.5s ease-in;
         }
 
         @keyframes fadeIn {
@@ -68,26 +101,50 @@
 </head>
 <body>
     <div class="container">
+        <!-- Состояние загрузки -->
         <div id="loading">
             <div class="loader"></div>
             <div class="status" id="status">Идет авторизация...</div>
         </div>
 
+        <!-- Состояние ошибки -->
         <div id="error" class="error hidden">
             <div id="error-text"></div>
-            <button onclick="window.location.reload()" style="margin-top: 10px;">
-                Попробовать снова
-            </button>
+            <button class="button" onclick="window.location.reload()">Попробовать снова</button>
         </div>
 
+        <!-- Основной интерфейс -->
         <div id="main" class="main-interface hidden">
-            <h1>Добро пожаловать!</h1>
-            <div id="content"></div>
+            <div class="section">
+                <h1>👋 Добро пожаловать!</h1>
+                <p>Ваш ID: <strong id="user-id">-</strong></p>
+            </div>
+
+            <div class="section">
+                <h2>🔍 Поиск мастеров</h2>
+                <input type="text" id="city" placeholder="Ваш город">
+                <select id="service">
+                    <option value="nails">💅 Маникюр</option>
+                    <option value="lashes">👁️ Наращивание ресниц</option>
+                    <option value="brows">✂️ Коррекция бровей</option>
+                </select>
+                <button class="button" onclick="searchMasters()">Найти</button>
+                <div id="masters-list" style="margin-top: 15px;"></div>
+            </div>
+
+            <div class="section">
+                <h2>📅 Мои записи</h2>
+                <button class="button" onclick="loadBookings()">Обновить</button>
+                <div id="bookings" style="margin-top: 10px;"></div>
+            </div>
+
+            <div class="section">
+                <button class="button" onclick="tg.close()">Закрыть</button>
+            </div>
         </div>
     </div>
 
     <script>
-        // Ожидаем полной загрузки DOM
         document.addEventListener('DOMContentLoaded', () => {
             const tg = window.Telegram.WebApp;
             const backendUrl = 'https://dumbly-miraculous-chamois.cloudpub.ru';
@@ -99,7 +156,9 @@
                 main: document.getElementById('main'),
                 status: document.getElementById('status'),
                 errorText: document.getElementById('error-text'),
-                content: document.getElementById('content')
+                userId: document.getElementById('user-id'),
+                mastersList: document.getElementById('masters-list'),
+                bookings: document.getElementById('bookings')
             };
 
             // Параметры URL
@@ -107,13 +166,13 @@
             const initData = urlParams.get('init_data');
             const hash = urlParams.get('hash');
 
-            // Инициализация приложения
+            // Инициализация
             function initApp() {
                 tg.expand();
                 tg.enableClosingConfirmation();
                 
                 if (!initData || !hash) {
-                    showError('Отсутствуют параметры авторизации');
+                    showError('Ошибка авторизации');
                     return;
                 }
 
@@ -131,17 +190,13 @@
                         body: JSON.stringify({ init_data: initData, hash: hash })
                     });
 
-                    if (!response.ok) {
-                        const error = await response.json();
-                        throw new Error(error.detail || 'Ошибка сервера');
-                    }
-
+                    if (!response.ok) throw new Error('Ошибка сервера');
+                    
                     const data = await response.json();
                     showMainInterface(data.user_id);
 
                 } catch (error) {
-                    console.error('Ошибка:', error);
-                    showError(error.message || 'Неизвестная ошибка');
+                    showError(error.message);
                 }
             }
 
@@ -149,20 +204,38 @@
             function showMainInterface(userId) {
                 elements.loading.classList.add('hidden');
                 elements.main.classList.remove('hidden');
-                
-                elements.content.innerHTML = `
-                    <div class="user-info">
-                        <h3>ID: ${userId}</h3>
-                        <p>Добро пожаловать!</p>
-                    </div>
-                `;
+                elements.userId.textContent = userId;
 
-                tg.MainButton.setText('Профиль').show().onClick(() => {
-                    tg.showAlert('Функционал в разработке 🛠️');
-                });
+                tg.MainButton.setText('Мой профиль')
+                    .show()
+                    .onClick(() => {
+                        tg.showAlert('Профиль в разработке 🛠️');
+                    });
             }
 
-            // Обработка ошибок
+            // Поиск мастеров
+            async function searchMasters() {
+                const city = document.getElementById('city').value;
+                const service = document.getElementById('service').value;
+
+                try {
+                    const response = await fetch(`${backendUrl}/api/masters?city=${city}&service=${service}`);
+                    const masters = await response.json();
+                    
+                    elements.mastersList.innerHTML = masters.map(master => `
+                        <div class="section" style="margin: 10px 0; padding: 15px;">
+                            <h3>${master.name} ★${master.rating}</h3>
+                            <p>📍 ${master.address}</p>
+                            <button class="button" onclick="showMaster(${master.id})">Выбрать</button>
+                        </div>
+                    `).join('');
+
+                } catch (error) {
+                    tg.showAlert('Ошибка поиска');
+                }
+            }
+
+            // Показать ошибку
             function showError(message) {
                 elements.loading.classList.add('hidden');
                 elements.error.classList.remove('hidden');
