@@ -5,293 +5,80 @@
     <title>BeautyBook</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            padding: 10px;
-            max-width: 600px;
-            margin: 0 auto;
-        }
-        button {
-            background: #007bff;
-            color: white;
-            border: none;
-            padding: 8px 15px;
-            border-radius: 4px;
-            cursor: pointer;
-            margin: 5px;
-        }
-        input, select {
-            padding: 8px;
-            margin: 5px;
-            border: 1px solid #ddd;
-            width: 200px;
-        }
-        .section {
-            border: 1px solid #eee;
-            padding: 15px;
-            margin: 10px 0;
-            border-radius: 8px;
-        }
-        ul {
-            list-style: none;
-            padding: 0;
-        }
-        li {
-            padding: 10px;
-            margin: 5px 0;
-            background: #f8f9fa;
-            border: 1px solid #eee;
-            border-radius: 4px;
-        }
-        .hidden {
-            display: none;
+        /* ... предыдущие стили ... */
+        .registration-form {
+            padding: 20px;
+            background: #f5f5f5;
+            border-radius: 10px;
+            margin: 20px 0;
         }
     </style>
 </head>
 <body>
-    <!-- Блок авторизации -->
-    <div id="auth" class="hidden">
-        <div class="section">
-            <button onclick="handleAuth()">🔐 Войти через Telegram</button>
+    <div id="app">
+        <div id="registration-section" class="hidden">
+            <div class="registration-form">
+                <h2>Завершите регистрацию</h2>
+                <select id="user-role">
+                    <option value="client">Я клиент</option>
+                    <option value="master">Я мастер</option>
+                </select>
+                <button onclick="completeRegistration()">Продолжить</button>
+            </div>
         </div>
-    </div>
-
-    <!-- Загрузка -->
-    <div id="loading" class="section">Загрузка...</div>
-
-    <!-- Клиентский интерфейс -->
-    <div id="client-view" class="hidden">
-        <div class="section">
-            <h2>🔍 Поиск мастеров</h2>
-            <input type="text" id="city" placeholder="Ваш город">
-            <select id="service">
-                <option value="nails">💅 Маникюр</option>
-                <option value="lashes">👁 Наращивание ресниц</option>
-                <option value="brows">✂️ Брови</option>
-            </select>
-            <button onclick="searchMasters()">Поиск</button>
-        </div>
-
-        <div class="section" id="masters-list"></div>
         
-        <div class="section hidden" id="booking-section">
-            <h3>📅 Выберите время</h3>
-            <div id="master-schedule"></div>
-        </div>
-
-        <div class="section" id="client-bookings">
-            <button onclick="loadClientBookings()">🔄 Обновить мои записи</button>
-            <div id="bookings-list"></div>
-        </div>
-    </div>
-
-    <!-- Интерфейс мастера -->
-    <div id="master-view" class="hidden">
-        <div class="section">
-            <h2>👩🎨 Панель мастера</h2>
-            <button onclick="showSection('schedule')">🗓 Расписание</button>
-            <button onclick="showSection('services')">💼 Услуги</button>
-            <button onclick="showSection('bookings')">📋 Записи</button>
-        </div>
-
-        <!-- Управление расписанием -->
-        <div class="section" id="schedule-section">
-            <h3>➕ Добавить слот</h3>
-            <input type="date" id="slot-date">
-            <input type="time" id="start-time">
-            <input type="time" id="end-time">
-            <button onclick="addTimeSlot()">Добавить</button>
-            
-            <h3>📅 Активные слоты</h3>
-            <div id="slots-list"></div>
-        </div>
-
-        <!-- Управление услугами -->
-        <div class="section hidden" id="services-section">
-            <h3>🎯 Добавить услугу</h3>
-            <input type="text" id="service-name" placeholder="Название">
-            <input type="number" id="service-price" placeholder="Цена">
-            <button onclick="addService()">Добавить</button>
-            <div id="services-list"></div>
-        </div>
-
-        <!-- Подтверждение записей -->
-        <div class="section hidden" id="bookings-section">
-            <h3>⏳ Ожидают подтверждения</h3>
-            <div id="pending-bookings"></div>
-        </div>
+        <!-- Остальные разделы -->
     </div>
 
 <script>
 const tg = window.Telegram.WebApp;
 let user = null;
-let currentMaster = null;
 
-// Инициализация
-document.addEventListener('DOMContentLoaded', () => {
-    if (tg.initDataUnsafe.user) {
-        user = tg.initDataUnsafe.user;
-        checkUserRole();
-        tg.expand();
-    } else {
-        document.getElementById('auth').classList.remove('hidden');
-        document.getElementById('loading').classList.add('hidden');
-    }
-});
-
-// Авторизация
-function handleAuth() {
-    tg.openTelegramLink(tg.initDataUnsafe.start_param 
-        ? `https://t.me/${tg.initDataUnsafe.bot.username}?start=${tg.initDataUnsafe.start_param}`
-        : `https://t.me/${tg.initDataUnsafe.bot.username}`);
-}
-
-// Проверка роли
-async function checkUserRole() {
-    try {
-        const response = await fetch('/api/user-role', {
-            headers: { 'X-Telegram-User': JSON.stringify(user) }
-        });
-        const data = await response.json();
-        
-        document.getElementById('loading').classList.add('hidden');
-        
-        if (data.role === 'master') {
-            document.getElementById('master-view').classList.remove('hidden');
-            loadMasterData();
-        } else {
-            document.getElementById('client-view').classList.remove('hidden');
-        }
-    } catch (error) {
-        tg.showAlert('⚠️ Ошибка загрузки данных');
-    }
-}
-
-// ================== Клиентские функции ================== //
-async function searchMasters() {
-    const city = document.getElementById('city').value;
-    const service = document.getElementById('service').value;
+async function init() {
+    tg.expand();
     
-    try {
-        const response = await fetch(`/api/masters?city=${city}&service=${service}`);
-        const masters = await response.json();
-        
-        let html = '';
-        masters.forEach(master => {
-            html += `
-                <div class="section">
-                    <h4>${master.name} ★${master.rating}</h4>
-                    <button onclick="showMasterSchedule(${master.id})">Выбрать</button>
-                </div>
-            `;
-        });
-        
-        document.getElementById('masters-list').innerHTML = html;
-    } catch (error) {
-        tg.showAlert('🚫 Ошибка поиска');
-    }
-}
-
-async function showMasterSchedule(masterId) {
-    try {
-        const response = await fetch(`/api/master/${masterId}/slots`);
-        const slots = await response.json();
-        
-        let html = '<ul>';
-        slots.forEach(slot => {
-            html += `
-                <li>
-                    ${slot.date} ${slot.start}-${slot.end}
-                    <button onclick="bookSlot(${slot.id})">📌 Записаться</button>
-                </li>
-            `;
-        });
-        
-        document.getElementById('master-schedule').innerHTML = html;
-        document.getElementById('booking-section').classList.remove('hidden');
-    } catch (error) {
-        tg.showAlert('🚫 Ошибка загрузки расписания');
-    }
-}
-
-// ================== Функции мастера ================== //
-async function addTimeSlot() {
-    const date = document.getElementById('slot-date').value;
-    const start = document.getElementById('start-time').value;
-    const end = document.getElementById('end-time').value;
-
-    if (!date || !start || !end) {
-        tg.showAlert('❌ Заполните все поля!');
-        return;
-    }
-
-    try {
-        const response = await fetch('/api/master/slots', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-Telegram-User': JSON.stringify(user)
-            },
-            body: JSON.stringify({ date, start, end })
-        });
-
-        if (response.ok) {
-            const slots = await response.json();
-            renderSlots(slots);
-            tg.showAlert('✅ Слот добавлен!');
-        }
-    } catch (error) {
-        tg.showAlert('🚫 Ошибка соединения');
-    }
-}
-
-async function loadMasterBookings() {
-    try {
-        const response = await fetch('/api/master/bookings');
-        const bookings = await response.json();
-        
-        let html = '<ul>';
-        bookings.forEach(booking => {
-            html += `
-                <li>
-                    ${booking.date} ${booking.time} 
-                    👤 ${booking.client_name}
-                    <button onclick="confirmBooking(${booking.id})">✅</button>
-                    <button onclick="cancelBookingMaster(${booking.id})">❌</button>
-                </li>
-            `;
-        });
-        document.getElementById('pending-bookings').innerHTML = html;
-    } catch (error) {
-        tg.showAlert('🚫 Ошибка загрузки');
-    }
-}
-
-// ================== Общие функции ================== //
-function showSection(section) {
-    ['schedule', 'services', 'bookings'].forEach(id => {
-        document.getElementById(`${id}-section`).classList.add('hidden');
+    // Проверка авторизации
+    const response = await fetch('/api/check-auth', {
+        headers: { 'X-Telegram-Init-Data': tg.initData }
     });
-    document.getElementById(`${section}-section`).classList.remove('hidden');
-}
-
-async function safeFetch(url, options) {
-    try {
-        const response = await fetch(url, options);
-        if (!response.ok) throw new Error(response.statusText);
-        return await response.json();
-    } catch (error) {
-        tg.showAlert(`🚫 Ошибка: ${error.message}`);
-        throw error;
+    
+    if (response.status === 401) {
+        showRegistrationForm();
+    } else {
+        const userData = await response.json();
+        initUserInterface(userData.role);
     }
 }
 
-// Инициализация WebSocket
-const socket = new WebSocket(`wss://${window.location.host}/ws`);
-socket.onmessage = (event) => {
-    const data = JSON.parse(event.data);
-    if (data.type === 'booking_update') loadClientBookings();
-};
+function showRegistrationForm() {
+    document.getElementById('registration-section').classList.remove('hidden');
+}
+
+async function completeRegistration() {
+    const role = document.getElementById('user-role').value;
+    
+    // Отправка данных в бот
+    tg.sendData(JSON.stringify({
+        type: 'registration',
+        user_id: tg.initDataUnsafe.user.id,
+        username: tg.initDataUnsafe.user.username,
+        first_name: tg.initDataUnsafe.user.first_name,
+        role: role
+    }));
+    
+    tg.close();
+}
+
+function initUserInterface(role) {
+    if (role === 'master') {
+        initMasterInterface();
+    } else {
+        initClientInterface();
+    }
+}
+
+// Инициализация при загрузке
+document.addEventListener('DOMContentLoaded', init);
 </script>
 </body>
 </html>
