@@ -1,121 +1,48 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <meta charset="UTF-8">
-    <title>BeautyBook</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        /* ... предыдущие стили ... */
-        .registration-form {
-            padding: 20px;
-            background: #f5f5f5;
-            border-radius: 10px;
-            margin: 20px 0;
-        }
+        /* Ваши стили */
     </style>
 </head>
 <body>
     <div id="app">
-        <div id="registration-section" class="hidden">
-            <div class="registration-form">
-                <h2>Завершите регистрацию</h2>
-                <select id="user-role">
-                    <option value="client">Я клиент</option>
-                    <option value="master">Я мастер</option>
-                </select>
-                <button onclick="completeRegistration()">Продолжить</button>
-            </div>
-        </div>
-        
-        <!-- Остальные разделы -->
+        Загрузка...
     </div>
 
-<script>
-const tg = window.Telegram.WebApp;
-let user = null;
-// Регистрация новых пользователей
-async function registerUser(role, city) {
-    const data = {
-        type: 'registration',
-        role: role,
-        city: city,
-        user_id: user.id,
-        username: user.username,
-        first_name: user.first_name
-    };
-    
-    await fetch('/api/register', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(data)
-    });
-}
+    <script>
+        const tg = window.Telegram.WebApp;
+        let userId = null;
 
-// Загрузка услуг мастера
-async function loadServices() {
-    const response = await fetch('/api/master/services');
-    const services = await response.json();
-    let html = '<ul>';
-    services.forEach(service => {
-        html += `<li>${service.name} - ${service.price} руб.</li>`;
-    });
-    document.getElementById('services-list').innerHTML = html;
-}
+        // Получаем initData из URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const initData = urlParams.get('initData');
+        const hash = urlParams.get('hash');
 
-// WebSocket обработчик
-socket.onmessage = (event) => {
-    const data = JSON.parse(event.data);
-    if (data.type === 'booking_update') {
-        loadClientBookings();
-        tg.showPopup({message: 'Новое обновление бронирования!'});
-    }
-};
+        // Отправляем данные на бекенд для верификации
+        fetch(`${BACKEND_URL}/api/auth`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ init_data: initData, hash: hash })
+        })
+        .then(response => response.json())
+        .then(data => {
+            userId = data.user_id;
+            tg.MainButton.setText('Мой профиль').show();
+            loadInterface();
+        })
+        .catch(error => {
+            tg.showAlert('Ошибка авторизации!');
+            tg.close();
+        });
 
-async function init() {
-    tg.expand();
-    
-    // Проверка авторизации
-    const response = await fetch('/api/check-auth', {
-        headers: { 'X-Telegram-Init-Data': tg.initData }
-    });
-    
-    if (response.status === 401) {
-        showRegistrationForm();
-    } else {
-        const userData = await response.json();
-        initUserInterface(userData.role);
-    }
-}
-
-function showRegistrationForm() {
-    document.getElementById('registration-section').classList.remove('hidden');
-}
-
-async function completeRegistration() {
-    const role = document.getElementById('user-role').value;
-    
-    // Отправка данных в бот
-    tg.sendData(JSON.stringify({
-        type: 'registration',
-        user_id: tg.initDataUnsafe.user.id,
-        username: tg.initDataUnsafe.user.username,
-        first_name: tg.initDataUnsafe.user.first_name,
-        role: role
-    }));
-    
-    tg.close();
-}
-
-function initUserInterface(role) {
-    if (role === 'master') {
-        initMasterInterface();
-    } else {
-        initClientInterface();
-    }
-}
-
-// Инициализация при загрузке
-document.addEventListener('DOMContentLoaded', init);
-</script>
+        function loadInterface() {
+            document.getElementById('app').innerHTML = `
+                <h1>Привет, ${userId}!</h1>
+                <!-- Остальной интерфейс -->
+            `;
+        }
+    </script>
 </body>
 </html>
