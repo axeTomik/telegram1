@@ -1,48 +1,72 @@
 <!DOCTYPE html>
 <html>
 <head>
+    <title>BeautyBook</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        /* Ваши стили */
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body>
     <div id="app">
-        Загрузка...
+        <div class="loader"></div>
+        <div id="status">Идет авторизация...</div>
     </div>
 
     <script>
         const tg = window.Telegram.WebApp;
-        let userId = null;
+        const backendUrl = 'http://localhost:8000';  # Локальный адрес бэкенда
+        
+        async function initApp() {
+            try {
+                // Получение параметров из URL
+                const urlParams = new URLSearchParams(window.location.search);
+                const initData = urlParams.get('initData');
+                const hash = urlParams.get('hash');
 
-        // Получаем initData из URL
-        const urlParams = new URLSearchParams(window.location.search);
-        const initData = urlParams.get('initData');
-        const hash = urlParams.get('hash');
+                // Отправка запроса на бэкенд
+                const response = await fetch(`${backendUrl}/api/auth`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ init_data: initData, hash: hash })
+                });
 
-        // Отправляем данные на бекенд для верификации
-        fetch(`${BACKEND_URL}/api/auth`, {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ init_data: initData, hash: hash })
-        })
-        .then(response => response.json())
-        .then(data => {
-            userId = data.user_id;
-            tg.MainButton.setText('Мой профиль').show();
-            loadInterface();
-        })
-        .catch(error => {
-            tg.showAlert('Ошибка авторизации!');
-            tg.close();
-        });
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
 
-        function loadInterface() {
-            document.getElementById('app').innerHTML = `
-                <h1>Привет, ${userId}!</h1>
-                <!-- Остальной интерфейс -->
-            `;
+                const data = await response.json();
+                
+                // Обновление интерфейса
+                document.getElementById('app').innerHTML = `
+                    <h1>Добро пожаловать, пользователь #${data.user_id}!</h1>
+                    <!-- Основной интерфейс -->
+                `;
+                
+                tg.MainButton.show().setText('Мой профиль');
+                
+            } catch (error) {
+                document.getElementById('status').textContent = 'Ошибка авторизации!';
+                tg.showAlert(error.message);
+                tg.close();
+            }
         }
+
+        // Инициализация при загрузке
+        tg.ready();
+        initApp();
     </script>
 </body>
 </html>
