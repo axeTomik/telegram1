@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <title>BeautyBook</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <style>
         :root {
             --primary: #007bff;
@@ -19,251 +18,116 @@
             margin: 0;
             padding: 20px;
             background: var(--light);
+            text-align: center;
         }
 
         .screen {
             display: none;
-            animation: fadeIn 0.3s ease;
         }
 
         .active {
             display: block !important;
         }
 
-        .header {
-            text-align: center;
-            margin: 30px 0;
+        .welcome-text {
+            font-size: 24px;
+            margin: 40px 0;
         }
 
-        .master-btn {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            padding: 12px 20px;
+        .auth-btn {
+            width: 80%;
+            padding: 15px;
+            margin: 10px auto;
             background: var(--primary);
             color: white;
             border: none;
             border-radius: 25px;
-            box-shadow: var(--shadow);
             cursor: pointer;
         }
 
-        .back-btn {
-            padding: 10px;
+        .master-auth-btn {
             background: var(--secondary);
-            color: white;
-            border: none;
-            border-radius: 10px;
-            margin-bottom: 20px;
-        }
-
-        .select-group {
-            background: white;
-            padding: 20px;
-            border-radius: 15px;
-            box-shadow: var(--shadow);
-            margin: 20px 0;
-        }
-
-        select, button, input {
-            width: 100%;
-            padding: 15px;
-            margin: 10px 0;
-            border: 1px solid #ddd;
-            border-radius: 10px;
-            font-size: 16px;
-        }
-
-        .service-card {
-            background: white;
-            padding: 15px;
-            margin: 10px 0;
-            border-radius: 10px;
-            box-shadow: var(--shadow);
         }
     </style>
 </head>
 <body>
-    <!-- Основной экран клиента -->
-    <div id="clientScreen" class="screen active">
-        <button class="master-btn" onclick="checkMasterAccess()">🎨 Я мастер</button>
+    <!-- Начальная страница -->
+    <div id="welcomeScreen" class="screen active">
+        <div class="welcome-text">
+            👋 Привет, <span id="username">Гость</span>!
+        </div>
         
-        <div class="header">
-            <h1>👋 Добро пожаловать!</h1>
-        </div>
-
-        <div class="select-group">
-            <select id="citySelect">
-                <option value="">Выберите город</option>
-                <option value="Воронеж">Воронеж</option>
-                <option value="Белгород">Белгород</option>
-            </select>
-            <button onclick="loadServices()">Найти услуги</button>
-        </div>
-
-        <div id="servicesList"></div>
+        <button class="auth-btn" onclick="registerUser()">Войти как клиент</button>
+        <button class="auth-btn master-auth-btn" onclick="registerMaster()">Войти как мастер</button>
     </div>
 
-    <!-- Регистрация мастера -->
-    <div id="masterRegistration" class="screen">
-        <button class="back-btn" onclick="showClientScreen()">← Назад</button>
-        <div class="header">
-            <h2>Регистрация мастера</h2>
-        </div>
-
-        <div class="select-group">
-            <input type="text" id="masterCity" placeholder="Ваш город" required>
-            <input type="text" id="masterContacts" placeholder="Контакты (например, @telegram)" required>
-            <button onclick="registerMaster()">Зарегистрироваться</button>
-        </div>
-    </div>
-
-    <!-- Панель мастера -->
-    <div id="masterScreen" class="screen">
-        <button class="back-btn" onclick="showClientScreen()">← Назад</button>
-        <div class="header">
-            <h2>Панель мастера</h2>
-        </div>
-
-        <div class="select-group">
-            <input type="datetime" id="slotPicker" placeholder="Выберите дату и время">
-            <button onclick="addSlot()">Добавить слот</button>
-        </div>
-
-        <div class="select-group">
-            <input type="text" id="serviceName" placeholder="Название услуги">
-            <input type="number" id="servicePrice" placeholder="Цена">
-            <input type="number" id="serviceDuration" placeholder="Длительность (мин)" min="30" max="180">
-            <button onclick="addService()">Добавить услугу</button>
-        </div>
-    </div>
-
-    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
     <script>
         const tg = window.Telegram.WebApp;
         const backendUrl = 'https://dumbly-miraculous-chamois.cloudpub.ru';
-        let currentUser = { id: null };
+        let currentUser = { 
+            id: tg.initDataUnsafe.user?.id,
+            username: tg.initDataUnsafe.user?.username || 'Гость'
+        };
 
-        // Инициализация календаря
-        const slotPicker = flatpickr("#slotPicker", {
-            enableTime: true,
-            mode: "range",
-            minDate: "today",
-            locale: "ru"
-        });
-
-        // Инициализация приложения
-        async function initApp() {
+        // Инициализация
+        function initApp() {
             tg.ready();
             tg.expand();
-            
-            // Аутентификация
+            document.getElementById('username').textContent = `@${currentUser.username}`;
+        }
+
+        // Регистрация клиента
+        async function registerUser() {
             try {
-                const authResponse = await fetch(`${backendUrl}/api/auth`, {
+                const response = await fetch(`${backendUrl}/api/auth`, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ 
-                        init_data: tg.initData, 
-                        hash: tg.initDataHash 
+                    body: JSON.stringify({
+                        init_data: tg.initData,
+                        hash: tg.initDataHash
                     })
                 });
-                
-                if (!authResponse.ok) throw new Error('Auth failed');
-                const { user_id } = await authResponse.json();
-                currentUser.id = user_id;
+
+                if (response.ok) {
+                    window.location.href = 'client.html'; // Перенаправление
+                }
             } catch (error) {
-                tg.showAlert('Ошибка авторизации');
+                tg.showAlert('Ошибка регистрации');
             }
         }
 
         // Регистрация мастера
         async function registerMaster() {
-            const city = document.getElementById('masterCity').value;
-            const contacts = document.getElementById('masterContacts').value;
-            
-            if (!city || !contacts) {
-                tg.showAlert("Заполните все поля!");
-                return;
-            }
-
             try {
-                const response = await fetch(`${backendUrl}/api/masters`, {
+                const authResponse = await fetch(`${backendUrl}/api/auth`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        init_data: tg.initData,
+                        hash: tg.initDataHash
+                    })
+                });
+
+                if (!authResponse.ok) throw new Error('Auth failed');
+
+                const masterRegResponse = await fetch(`${backendUrl}/api/masters`, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
                         user_id: currentUser.id,
-                        city: city,
-                        contacts: contacts
+                        city: 'Не указан',
+                        contacts: '@' + currentUser.username
                     })
                 });
-                
-                if (response.ok) {
-                    tg.showAlert("Вы успешно зарегистрированы!");
-                    showMasterScreen();
-                } else {
-                    tg.showAlert("Ошибка регистрации");
+
+                if (masterRegResponse.ok) {
+                    window.location.href = 'master.html'; // Перенаправление
                 }
             } catch (error) {
-                tg.showAlert("Ошибка сервера");
+                tg.showAlert('Ошибка регистрации мастера');
             }
         }
 
-        // Проверка прав мастера
-        async function checkMasterAccess() {
-            try {
-                const response = await fetch(`${backendUrl}/api/is-master?tg_id=${currentUser.id}`);
-                const { is_master } = await response.json();
-                
-                if (is_master) {
-                    showMasterScreen();
-                } else {
-                    document.getElementById('clientScreen').classList.remove('active');
-                    document.getElementById('masterRegistration').classList.add('active');
-                }
-            } catch (error) {
-                tg.showAlert("Ошибка проверки статуса");
-            }
-        }
-
-        // Добавление услуги
-        async function addService() {
-            const serviceData = {
-                master_id: currentUser.id,
-                name: document.getElementById('serviceName').value,
-                price: document.getElementById('servicePrice').value,
-                duration: document.getElementById('serviceDuration').value
-            };
-
-            if (!serviceData.name || !serviceData.price || !serviceData.duration) {
-                tg.showAlert("Заполните все поля!");
-                return;
-            }
-
-            try {
-                const response = await fetch(`${backendUrl}/api/services`, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify(serviceData)
-                });
-                
-                response.ok ? tg.showAlert("Услуга добавлена!") : tg.showAlert("Ошибка!");
-            } catch (error) {
-                tg.showAlert("Ошибка сервера");
-            }
-        }
-
-        // Навигация
-        function showMasterScreen() {
-            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-            document.getElementById('masterScreen').classList.add('active');
-        }
-
-        function showClientScreen() {
-            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-            document.getElementById('clientScreen').classList.add('active');
-        }
-
-        // Запуск приложения
         document.addEventListener('DOMContentLoaded', initApp);
     </script>
 </body>
