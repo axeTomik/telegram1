@@ -10,6 +10,7 @@
             --secondary: #6c757d;
             --light: #f8f9fa;
             --dark: #343a40;
+            --shadow: 0 2px 8px rgba(0,0,0,0.1);
         }
 
         body {
@@ -21,6 +22,7 @@
 
         .screen {
             display: none;
+            animation: fadeIn 0.3s ease;
         }
 
         .active {
@@ -29,78 +31,110 @@
 
         .header {
             text-align: center;
-            margin-bottom: 2rem;
-        }
-
-        .city-selector {
-            margin: 20px 0;
-            padding: 15px;
-            border-radius: 10px;
-            background: white;
+            margin: 30px 0;
         }
 
         .master-btn {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 12px 20px;
             background: var(--primary);
             color: white;
-            padding: 20px;
-            border-radius: 15px;
-            font-size: 1.2rem;
-            margin: 20px 0;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            border: none;
+            border-radius: 25px;
+            box-shadow: var(--shadow);
+            cursor: pointer;
             transition: transform 0.2s;
         }
 
         .master-btn:active {
-            transform: scale(0.98);
+            transform: scale(0.95);
+        }
+
+        .select-group {
+            background: white;
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: var(--shadow);
+            margin: 20px 0;
+        }
+
+        select, .action-btn {
+            width: 100%;
+            padding: 15px;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            font-size: 16px;
+        }
+
+        .action-btn {
+            background: var(--primary);
+            color: white;
+            border: none;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+
+        .action-btn:active {
+            opacity: 0.8;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
         }
     </style>
 </head>
 <body>
     <!-- Главный экран -->
     <div id="homeScreen" class="screen active">
+        <button class="master-btn" onclick="showMasterScreen()">🎨 Мастер</button>
+        
         <div class="header">
-            <h1>👋 Добро пожаловать в BeautyBook!</h1>
+            <h1>👋 Добро пожаловать, <span id="username">@username</span></h1>
         </div>
 
-        <button class="master-btn" onclick="showMasterScreen()">
-            🎨 Войти как мастер
-        </button>
-
-        <div class="city-selector">
+        <div class="select-group">
             <select id="citySelect">
+                <option value="">Выберите город</option>
                 <option value="Воронеж">Воронеж</option>
                 <option value="Старый Оскол">Старый Оскол</option>
                 <option value="Губкин">Губкин</option>
                 <option value="Белгород">Белгород</option>
             </select>
-            <button class="button" onclick="selectCity()">Выбрать город</button>
+            
+            <button class="action-btn" onclick="selectCity()">Выбрать город</button>
         </div>
     </div>
 
     <!-- Экран выбора услуги -->
     <div id="serviceScreen" class="screen">
-        <div class="header">
-            <h2>Выберите услугу</h2>
-        </div>
-        
-        <div class="service-list">
-            <button class="service-btn" data-service="nails">💅 Ногти</button>
-            <button class="service-btn" data-service="lashes">👁️ Ресницы</button>
-            <button class="service-btn" data-service="brows">✂️ Брови</button>
+        <div class="select-group">
+            <select id="serviceSelect">
+                <option value="">Выберите услугу</option>
+                <option value="nails">💅 Ногти</option>
+                <option value="lashes">👁️ Ресницы</option>
+                <option value="brows">✂️ Брови</option>
+            </select>
+            
+            <button class="action-btn" onclick="selectService()">Продолжить</button>
         </div>
     </div>
 
     <!-- Экран списка мастеров -->
     <div id="mastersScreen" class="screen">
         <div class="header">
-            <h2>Мастера в <span id="currentCity"></span></h2>
-            <p>Услуга: <span id="currentService"></span></p>
+            <h2>Доступные мастера</h2>
+            <p>📍 <span id="currentCity"></span> | 💼 <span id="currentService"></span></p>
         </div>
         
-        <div id="mastersList"></div>
+        <div id="mastersList" class="select-group"></div>
     </div>
 
     <script>
+        const tg = window.Telegram.WebApp;
         let currentCity = '';
         let currentService = '';
 
@@ -108,51 +142,66 @@
         function initApp() {
             tg.ready();
             tg.expand();
+            loadUserData();
         }
 
-        // Навигация между экранами
+        // Загрузка данных пользователя
+        async function loadUserData() {
+            try {
+                const user = await fetch('/api/user-data');
+                const data = await user.json();
+                document.getElementById('username').textContent = `@${data.username}`;
+            } catch (error) {
+                tg.showAlert('Ошибка загрузки данных');
+            }
+        }
+
+        // Навигация
         function showScreen(screenId) {
             document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
             document.getElementById(screenId).classList.add('active');
         }
 
-        // Обработчики действий
+        // Выбор города
         function selectCity() {
             currentCity = document.getElementById('citySelect').value;
+            if (!currentCity) return tg.showAlert('Выберите город');
             showScreen('serviceScreen');
         }
 
-        function selectService(service) {
-            currentService = service;
-            showScreen('mastersScreen');
-            loadMasters();
-        }
-
-        // Загрузка мастеров
-        async function loadMasters() {
+        // Выбор услуги
+        async function selectService() {
+            currentService = document.getElementById('serviceSelect').value;
+            if (!currentService) return tg.showAlert('Выберите услугу');
+            
             try {
                 const response = await fetch(`/api/masters?city=${currentCity}&service=${currentService}`);
                 const masters = await response.json();
                 
                 document.getElementById('currentCity').textContent = currentCity;
                 document.getElementById('currentService').textContent = 
-                    {nails: 'Ногти', lashes: 'Ресницы', brows: 'Брови'}[currentService];
+                    document.querySelector(`#serviceSelect option[value="${currentService}"]`).textContent;
                 
-                // Отрисовка мастеров
-                const list = document.getElementById('mastersList');
-                list.innerHTML = masters.map(m => `
-                    <div class="master-card">
-                        <h3>${m.name}</h3>
-                        <p>Цена: ${m.price} руб.</p>
-                    </div>
-                `).join('');
-                
+                renderMasters(masters);
+                showScreen('mastersScreen');
             } catch (error) {
-                tg.showAlert('Ошибка загрузки данных');
+                tg.showAlert('Ошибка загрузки мастеров');
             }
         }
 
-        // Инициализация
+        // Отрисовка мастеров
+        function renderMasters(masters) {
+            const list = document.getElementById('mastersList');
+            list.innerHTML = masters.map(master => `
+                <div class="master-card">
+                    <h3>${master.name}</h3>
+                    <p>💰 ${master.price} руб. | ⏱ ${master.duration} мин.</p>
+                    <p>${master.bio}</p>
+                </div>
+            `).join('');
+        }
+
+        // Старт приложения
         document.addEventListener('DOMContentLoaded', initApp);
     </script>
 </body>
