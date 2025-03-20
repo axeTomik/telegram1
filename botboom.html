@@ -84,7 +84,7 @@
     </style>
 </head>
 <body>
-    <!-- Клиентский интерфейс -->
+    <!-- Основной экран клиента -->
     <div id="clientScreen" class="screen active">
         <button class="master-btn" onclick="checkMasterAccess()">🎨 Я мастер</button>
         
@@ -98,14 +98,27 @@
                 <option value="Воронеж">Воронеж</option>
                 <option value="Белгород">Белгород</option>
             </select>
-            
             <button onclick="loadServices()">Найти услуги</button>
         </div>
 
         <div id="servicesList"></div>
     </div>
 
-    <!-- Интерфейс мастера -->
+    <!-- Регистрация мастера -->
+    <div id="masterRegistration" class="screen">
+        <button class="back-btn" onclick="showClientScreen()">← Назад</button>
+        <div class="header">
+            <h2>Регистрация мастера</h2>
+        </div>
+
+        <div class="select-group">
+            <input type="text" id="masterCity" placeholder="Ваш город" required>
+            <input type="text" id="masterContacts" placeholder="Контакты (например, @telegram)" required>
+            <button onclick="registerMaster()">Зарегистрироваться</button>
+        </div>
+    </div>
+
+    <!-- Панель мастера -->
     <div id="masterScreen" class="screen">
         <button class="back-btn" onclick="showClientScreen()">← Назад</button>
         <div class="header">
@@ -129,7 +142,7 @@
     <script>
         const tg = window.Telegram.WebApp;
         const backendUrl = 'https://dumbly-miraculous-chamois.cloudpub.ru';
-        let currentUser = { id: tg.initDataUnsafe.user.id };
+        let currentUser = { id: null };
 
         // Инициализация календаря
         const slotPicker = flatpickr("#slotPicker", {
@@ -139,15 +152,76 @@
             locale: "ru"
         });
 
+        // Инициализация приложения
+        async function initApp() {
+            tg.ready();
+            tg.expand();
+            
+            // Аутентификация
+            try {
+                const authResponse = await fetch(`${backendUrl}/api/auth`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ 
+                        init_data: tg.initData, 
+                        hash: tg.initDataHash 
+                    })
+                });
+                
+                if (!authResponse.ok) throw new Error('Auth failed');
+                const { user_id } = await authResponse.json();
+                currentUser.id = user_id;
+            } catch (error) {
+                tg.showAlert('Ошибка авторизации');
+            }
+        }
+
+        // Регистрация мастера
+        async function registerMaster() {
+            const city = document.getElementById('masterCity').value;
+            const contacts = document.getElementById('masterContacts').value;
+            
+            if (!city || !contacts) {
+                tg.showAlert("Заполните все поля!");
+                return;
+            }
+
+            try {
+                const response = await fetch(`${backendUrl}/api/masters`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        user_id: currentUser.id,
+                        city: city,
+                        contacts: contacts
+                    })
+                });
+                
+                if (response.ok) {
+                    tg.showAlert("Вы успешно зарегистрированы!");
+                    showMasterScreen();
+                } else {
+                    tg.showAlert("Ошибка регистрации");
+                }
+            } catch (error) {
+                tg.showAlert("Ошибка сервера");
+            }
+        }
+
         // Проверка прав мастера
         async function checkMasterAccess() {
             try {
                 const response = await fetch(`${backendUrl}/api/is-master?tg_id=${currentUser.id}`);
                 const { is_master } = await response.json();
-                if (is_master) showMasterScreen();
-                else tg.showAlert("Вы не зарегистрированы как мастер!");
+                
+                if (is_master) {
+                    showMasterScreen();
+                } else {
+                    document.getElementById('clientScreen').classList.remove('active');
+                    document.getElementById('masterRegistration').classList.add('active');
+                }
             } catch (error) {
-                tg.showAlert("Ошибка доступа");
+                tg.showAlert("Ошибка проверки статуса");
             }
         }
 
@@ -160,45 +234,37 @@
                 duration: document.getElementById('serviceDuration').value
             };
 
-            const response = await fetch(`${backendUrl}/api/services`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(serviceData)
-            });
-            
-            response.ok ? tg.showAlert("Услуга добавлена!") : tg.showAlert("Ошибка!");
-        }
+            if (!serviceData.name || !serviceData.price || !serviceData.duration) {
+                tg.showAlert("Заполните все поля!");
+                return;
+            }
 
-        // Поиск услуг
-        async function loadServices() {
-            const city = document.getElementById('citySelect').value;
-            const response = await fetch(`${backendUrl}/api/services?city=${city}`);
-            const services = await response.json();
-            
-            const list = document.getElementById('servicesList');
-            list.innerHTML = services.map(service => `
-                <div class="service-card">
-                    <h3>${service.name}</h3>
-                    <p>Цена: ${service.price} руб</p>
-                    <p>Длительность: ${service.duration} мин</p>
-                    <button onclick="bookService(${service.id})">Записаться</button>
-                </div>
-            `).join('');
+            try {
+                const response = await fetch(`${backendUrl}/api/services`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(serviceData)
+                });
+                
+                response.ok ? tg.showAlert("Услуга добавлена!") : tg.showAlert("Ошибка!");
+            } catch (error) {
+                tg.showAlert("Ошибка сервера");
+            }
         }
 
         // Навигация
         function showMasterScreen() {
-            document.getElementById('clientScreen').classList.remove('active');
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
             document.getElementById('masterScreen').classList.add('active');
         }
 
         function showClientScreen() {
-            document.getElementById('masterScreen').classList.remove('active');
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
             document.getElementById('clientScreen').classList.add('active');
         }
 
-        tg.ready();
-        tg.expand();
+        // Запуск приложения
+        document.addEventListener('DOMContentLoaded', initApp);
     </script>
 </body>
 </html>
