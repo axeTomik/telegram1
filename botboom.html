@@ -46,7 +46,6 @@
             border-radius: 25px;
             box-shadow: var(--shadow);
             cursor: pointer;
-            transition: transform 0.2s;
         }
 
         .back-btn {
@@ -66,7 +65,7 @@
             margin: 20px 0;
         }
 
-        select, .action-btn, input {
+        select, button, input {
             width: 100%;
             padding: 15px;
             margin: 10px 0;
@@ -75,17 +74,12 @@
             font-size: 16px;
         }
 
-        .tab-content {
-            display: none;
-        }
-
-        .tab-content.active {
-            display: block;
-        }
-
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
+        .service-card {
+            background: white;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 10px;
+            box-shadow: var(--shadow);
         }
     </style>
 </head>
@@ -102,11 +96,13 @@
             <select id="citySelect">
                 <option value="">Выберите город</option>
                 <option value="Воронеж">Воронеж</option>
-                <option value="Старый Оскол">Старый Оскол</option>
+                <option value="Белгород">Белгород</option>
             </select>
             
-            <button class="action-btn" onclick="selectCity()">Выбрать город</button>
+            <button onclick="loadServices()">Найти услуги</button>
         </div>
+
+        <div id="servicesList"></div>
     </div>
 
     <!-- Интерфейс мастера -->
@@ -116,23 +112,16 @@
             <h2>Панель мастера</h2>
         </div>
 
-        <div class="tabs">
-            <button onclick="showTab('schedule')">Расписание</button>
-            <button onclick="showTab('services')">Услуги</button>
-        </div>
-
-        <!-- Управление расписанием -->
-        <div id="schedule" class="tab-content active">
+        <div class="select-group">
             <input type="datetime" id="slotPicker" placeholder="Выберите дату и время">
-            <button class="action-btn" onclick="addSlot()">Добавить слот</button>
+            <button onclick="addSlot()">Добавить слот</button>
         </div>
 
-        <!-- Управление услугами -->
-        <div id="services" class="tab-content">
+        <div class="select-group">
             <input type="text" id="serviceName" placeholder="Название услуги">
-            <input type="number" id="servicePrice" placeholder="Цена (руб)">
-            <input type="number" id="serviceDuration" placeholder="Длительность (мин)">
-            <button class="action-btn" onclick="addService()">Добавить услугу</button>
+            <input type="number" id="servicePrice" placeholder="Цена">
+            <input type="number" id="serviceDuration" placeholder="Длительность (мин)" min="30" max="180">
+            <button onclick="addService()">Добавить услугу</button>
         </div>
     </div>
 
@@ -140,7 +129,7 @@
     <script>
         const tg = window.Telegram.WebApp;
         const backendUrl = 'https://dumbly-miraculous-chamois.cloudpub.ru';
-        let currentUser = { id: null };
+        let currentUser = { id: tg.initDataUnsafe.user.id };
 
         // Инициализация календаря
         const slotPicker = flatpickr("#slotPicker", {
@@ -155,48 +144,61 @@
             try {
                 const response = await fetch(`${backendUrl}/api/is-master?tg_id=${currentUser.id}`);
                 const { is_master } = await response.json();
-                
-                if (is_master) {
-                    document.getElementById('clientScreen').classList.remove('active');
-                    document.getElementById('masterScreen').classList.add('active');
-                } else {
-                    tg.showAlert("Вы не зарегистрированы как мастер!");
-                }
+                if (is_master) showMasterScreen();
+                else tg.showAlert("Вы не зарегистрированы как мастер!");
             } catch (error) {
                 tg.showAlert("Ошибка доступа");
             }
         }
 
-        // Добавление слота
-        async function addSlot() {
-            const [start, end] = slotPicker.selectedDates;
-            const response = await fetch(`${backendUrl}/api/slots`, {
+        // Добавление услуги
+        async function addService() {
+            const serviceData = {
+                master_id: currentUser.id,
+                name: document.getElementById('serviceName').value,
+                price: document.getElementById('servicePrice').value,
+                duration: document.getElementById('serviceDuration').value
+            };
+
+            const response = await fetch(`${backendUrl}/api/services`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    master_id: currentUser.id,
-                    start: start.toISOString(),
-                    end: end.toISOString()
-                })
+                body: JSON.stringify(serviceData)
             });
-            response.ok ? tg.showAlert("Слот добавлен!") : tg.showAlert("Ошибка!");
+            
+            response.ok ? tg.showAlert("Услуга добавлена!") : tg.showAlert("Ошибка!");
+        }
+
+        // Поиск услуг
+        async function loadServices() {
+            const city = document.getElementById('citySelect').value;
+            const response = await fetch(`${backendUrl}/api/services?city=${city}`);
+            const services = await response.json();
+            
+            const list = document.getElementById('servicesList');
+            list.innerHTML = services.map(service => `
+                <div class="service-card">
+                    <h3>${service.name}</h3>
+                    <p>Цена: ${service.price} руб</p>
+                    <p>Длительность: ${service.duration} мин</p>
+                    <button onclick="bookService(${service.id})">Записаться</button>
+                </div>
+            `).join('');
         }
 
         // Навигация
+        function showMasterScreen() {
+            document.getElementById('clientScreen').classList.remove('active');
+            document.getElementById('masterScreen').classList.add('active');
+        }
+
         function showClientScreen() {
             document.getElementById('masterScreen').classList.remove('active');
             document.getElementById('clientScreen').classList.add('active');
         }
 
-        function showTab(tabId) {
-            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-            document.getElementById(tabId).classList.add('active');
-        }
-
-        // Инициализация
         tg.ready();
         tg.expand();
-        currentUser.id = new URLSearchParams(window.location.search).get('user_id');
     </script>
 </body>
 </html>
