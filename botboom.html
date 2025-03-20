@@ -5,7 +5,49 @@
     <title>BeautyBook</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        /* ... ваш CSS без изменений ... */
+        :root {
+            --primary: #007bff;
+            --secondary: #6c757d;
+            --light: #f8f9fa;
+            --dark: #343a40;
+            --shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: var(--light);
+            text-align: center;
+        }
+
+        .screen {
+            display: none;
+        }
+
+        .active {
+            display: block !important;
+        }
+
+        .welcome-text {
+            font-size: 24px;
+            margin: 40px 0;
+        }
+
+        .auth-btn {
+            width: 80%;
+            padding: 15px;
+            margin: 10px auto;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+        }
+
+        .master-auth-btn {
+            background: var(--secondary);
+        }
     </style>
 </head>
 <body>
@@ -26,41 +68,88 @@
             username: tg.initDataUnsafe.user?.username || 'Гость'
         };
 
+        // Инициализация приложения
         function initApp() {
             tg.ready();
             tg.expand();
             document.getElementById('username').textContent = `@${currentUser.username}`;
         }
 
+        // Регистрация клиента
         async function registerUser() {
             try {
-                // Проверка наличия данных
+                // Проверка наличия данных Telegram
                 if (!tg.initData || !tg.initDataHash) {
-                    tg.showAlert('Ошибка: данные Telegram не получены');
+                    tg.showAlert('Ошибка: данные авторизации не получены');
                     return;
                 }
 
+                // Отправка запроса на бэкенд
                 const response = await fetch(`${backendUrl}/api/auth`, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
-                        init_data: encodeURIComponent(tg.initData), // Кодируем данные
+                        init_data: encodeURIComponent(tg.initData), // Кодирование данных
                         hash: tg.initDataHash
                     })
                 });
 
+                // Обработка ответа
                 if (response.ok) {
                     window.location.href = 'client.html';
                 } else {
                     const error = await response.json();
-                    tg.showAlert(`Ошибка: ${error.detail}`);
+                    tg.showAlert(`Ошибка: ${error.detail || 'Неизвестная ошибка'}`);
                 }
             } catch (error) {
-                tg.showAlert('Ошибка регистрации');
+                tg.showAlert('Ошибка соединения с сервером');
             }
         }
 
-        // ... остальной код без изменений ...
+        // Регистрация мастера
+        async function registerMaster() {
+            try {
+                // Проверка данных
+                if (!tg.initData || !tg.initDataHash) {
+                    tg.showAlert('Ошибка: данные авторизации не получены');
+                    return;
+                }
+
+                // Аутентификация
+                const authResponse = await fetch(`${backendUrl}/api/auth`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        init_data: encodeURIComponent(tg.initData),
+                        hash: tg.initDataHash
+                    })
+                });
+
+                if (!authResponse.ok) throw new Error('Ошибка аутентификации');
+
+                // Регистрация мастера
+                const masterRegResponse = await fetch(`${backendUrl}/api/masters`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        user_id: currentUser.id,
+                        city: 'Не указан',
+                        contacts: '@' + currentUser.username
+                    })
+                });
+
+                if (masterRegResponse.ok) {
+                    window.location.href = 'master.html';
+                } else {
+                    const error = await masterRegResponse.json();
+                    tg.showAlert(`Ошибка: ${error.detail || 'Неизвестная ошибка'}`);
+                }
+            } catch (error) {
+                tg.showAlert(error.message || 'Ошибка регистрации мастера');
+            }
+        }
+
+        // Запуск приложения
         document.addEventListener('DOMContentLoaded', initApp);
     </script>
 </body>
