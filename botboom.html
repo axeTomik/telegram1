@@ -83,7 +83,7 @@
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
-                        init_data: tg.initData,
+                        init_data: tg.initDataUnsafe.query_id ? encodeURIComponent(tg.initData) : '', // Преобразуем в строку
                         hash: tg.initDataHash
                     })
                 });
