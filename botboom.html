@@ -48,10 +48,6 @@
             transition: transform 0.2s;
         }
 
-        .master-btn:active {
-            transform: scale(0.95);
-        }
-
         .select-group {
             background: white;
             padding: 20px;
@@ -74,11 +70,6 @@
             color: white;
             border: none;
             cursor: pointer;
-            transition: opacity 0.2s;
-        }
-
-        .action-btn:active {
-            opacity: 0.8;
         }
 
         @keyframes fadeIn {
@@ -88,12 +79,11 @@
     </style>
 </head>
 <body>
-    <!-- Главный экран -->
     <div id="homeScreen" class="screen active">
         <button class="master-btn" onclick="showMasterScreen()">🎨 Мастер</button>
         
         <div class="header">
-            <h1>👋 Добро пожаловать, <span id="username">@username</span></h1>
+            <h1>👋 Добро пожаловать, <span id="username"></span></h1>
         </div>
 
         <div class="select-group">
@@ -109,7 +99,6 @@
         </div>
     </div>
 
-    <!-- Экран выбора услуги -->
     <div id="serviceScreen" class="screen">
         <div class="select-group">
             <select id="serviceSelect">
@@ -123,7 +112,6 @@
         </div>
     </div>
 
-    <!-- Экран списка мастеров -->
     <div id="mastersScreen" class="screen">
         <div class="header">
             <h2>Доступные мастера</h2>
@@ -135,24 +123,48 @@
 
     <script>
         const tg = window.Telegram.WebApp;
+        const backendUrl = 'ВАШ_БЭКЕНД_URL';
+        let currentUser = {};
         let currentCity = '';
         let currentService = '';
 
         // Инициализация приложения
-        function initApp() {
+        async function initApp() {
             tg.ready();
             tg.expand();
-            loadUserData();
+            
+            // Получаем параметры из URL
+            const urlParams = new URLSearchParams(window.location.search);
+            const initData = urlParams.get('init_data');
+            const hash = urlParams.get('hash');
+
+            // Аутентификация
+            try {
+                const authResponse = await fetch(`${backendUrl}/api/auth`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ init_data: initData, hash: hash })
+                });
+                
+                if (!authResponse.ok) throw new Error('Auth failed');
+                
+                const { user_id } = await authResponse.json();
+                currentUser.id = user_id;
+                loadUserData(user_id);
+                
+            } catch (error) {
+                tg.showAlert('Ошибка авторизации');
+            }
         }
 
         // Загрузка данных пользователя
-        async function loadUserData() {
+        async function loadUserData(userId) {
             try {
-                const user = await fetch('/api/user-data');
-                const data = await user.json();
-                document.getElementById('username').textContent = `@${data.username}`;
+                const response = await fetch(`${backendUrl}/api/user-role?tg_id=${userId}`);
+                const { role } = await response.json();
+                document.getElementById('username').textContent = `@user_${userId}`;
             } catch (error) {
-                tg.showAlert('Ошибка загрузки данных');
+                console.error('Error loading user data:', error);
             }
         }
 
@@ -175,33 +187,38 @@
             if (!currentService) return tg.showAlert('Выберите услугу');
             
             try {
-                const response = await fetch(`/api/masters?city=${currentCity}&service=${currentService}`);
+                const response = await fetch(
+                    `${backendUrl}/api/masters?city=${encodeURIComponent(currentCity)}&service=${currentService}`
+                );
+                
+                if (!response.ok) throw new Error('Server error');
+                
                 const masters = await response.json();
-                
-                document.getElementById('currentCity').textContent = currentCity;
-                document.getElementById('currentService').textContent = 
-                    document.querySelector(`#serviceSelect option[value="${currentService}"]`).textContent;
-                
                 renderMasters(masters);
                 showScreen('mastersScreen');
+                
             } catch (error) {
-                tg.showAlert('Ошибка загрузки мастеров');
+                tg.showAlert('Ошибка загрузки данных');
             }
         }
 
         // Отрисовка мастеров
         function renderMasters(masters) {
             const list = document.getElementById('mastersList');
+            document.getElementById('currentCity').textContent = currentCity;
+            document.getElementById('currentService').textContent = 
+                document.querySelector(`#serviceSelect option[value="${currentService}"]`).textContent;
+
             list.innerHTML = masters.map(master => `
-                <div class="master-card">
-                    <h3>${master.name}</h3>
-                    <p>💰 ${master.price} руб. | ⏱ ${master.duration} мин.</p>
-                    <p>${master.bio}</p>
+                <div style="padding: 15px; margin: 10px 0; background: white; border-radius: 10px;">
+                    <h3>${master.name || 'Мастер'}</h3>
+                    <p>💰 Цена: ${master.price} руб.</p>
+                    <p>⏱ Длительность: ${master.duration} мин.</p>
+                    ${master.bio ? `<p>${master.bio}</p>` : ''}
                 </div>
             `).join('');
         }
 
-        // Старт приложения
         document.addEventListener('DOMContentLoaded', initApp);
     </script>
 </body>
