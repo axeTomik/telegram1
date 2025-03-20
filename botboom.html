@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <title>BeautyBook</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <style>
         :root {
             --primary: #007bff;
@@ -48,6 +49,15 @@
             transition: transform 0.2s;
         }
 
+        .back-btn {
+            padding: 10px;
+            background: var(--secondary);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+
         .select-group {
             background: white;
             padding: 20px;
@@ -56,7 +66,7 @@
             margin: 20px 0;
         }
 
-        select, .action-btn {
+        select, .action-btn, input {
             width: 100%;
             padding: 15px;
             margin: 10px 0;
@@ -65,11 +75,12 @@
             font-size: 16px;
         }
 
-        .action-btn {
-            background: var(--primary);
-            color: white;
-            border: none;
-            cursor: pointer;
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
         }
 
         @keyframes fadeIn {
@@ -79,11 +90,12 @@
     </style>
 </head>
 <body>
-    <div id="homeScreen" class="screen active">
-        <button class="master-btn" onclick="showMasterScreen()">🎨 Мастер</button>
+    <!-- Клиентский интерфейс -->
+    <div id="clientScreen" class="screen active">
+        <button class="master-btn" onclick="checkMasterAccess()">🎨 Я мастер</button>
         
         <div class="header">
-            <h1>👋 Добро пожаловать, <span id="username"></span></h1>
+            <h1>👋 Добро пожаловать!</h1>
         </div>
 
         <div class="select-group">
@@ -91,135 +103,100 @@
                 <option value="">Выберите город</option>
                 <option value="Воронеж">Воронеж</option>
                 <option value="Старый Оскол">Старый Оскол</option>
-                <option value="Губкин">Губкин</option>
-                <option value="Белгород">Белгород</option>
             </select>
             
             <button class="action-btn" onclick="selectCity()">Выбрать город</button>
         </div>
     </div>
 
-    <div id="serviceScreen" class="screen">
-        <div class="select-group">
-            <select id="serviceSelect">
-                <option value="">Выберите услугу</option>
-                <option value="nails">💅 Ногти</option>
-                <option value="lashes">👁️ Ресницы</option>
-                <option value="brows">✂️ Брови</option>
-            </select>
-            
-            <button class="action-btn" onclick="selectService()">Продолжить</button>
-        </div>
-    </div>
-
-    <div id="mastersScreen" class="screen">
+    <!-- Интерфейс мастера -->
+    <div id="masterScreen" class="screen">
+        <button class="back-btn" onclick="showClientScreen()">← Назад</button>
         <div class="header">
-            <h2>Доступные мастера</h2>
-            <p>📍 <span id="currentCity"></span> | 💼 <span id="currentService"></span></p>
+            <h2>Панель мастера</h2>
         </div>
-        
-        <div id="mastersList" class="select-group"></div>
+
+        <div class="tabs">
+            <button onclick="showTab('schedule')">Расписание</button>
+            <button onclick="showTab('services')">Услуги</button>
+        </div>
+
+        <!-- Управление расписанием -->
+        <div id="schedule" class="tab-content active">
+            <input type="datetime" id="slotPicker" placeholder="Выберите дату и время">
+            <button class="action-btn" onclick="addSlot()">Добавить слот</button>
+        </div>
+
+        <!-- Управление услугами -->
+        <div id="services" class="tab-content">
+            <input type="text" id="serviceName" placeholder="Название услуги">
+            <input type="number" id="servicePrice" placeholder="Цена (руб)">
+            <input type="number" id="serviceDuration" placeholder="Длительность (мин)">
+            <button class="action-btn" onclick="addService()">Добавить услугу</button>
+        </div>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
     <script>
         const tg = window.Telegram.WebApp;
         const backendUrl = 'https://dumbly-miraculous-chamois.cloudpub.ru';
-        let currentUser = {};
-        let currentCity = '';
-        let currentService = '';
+        let currentUser = { id: null };
 
-        // Инициализация приложения
-        async function initApp() {
-            tg.ready();
-            tg.expand();
-            
-            // Получаем параметры из URL
-            const urlParams = new URLSearchParams(window.location.search);
-            const initData = urlParams.get('init_data');
-            const hash = urlParams.get('hash');
+        // Инициализация календаря
+        const slotPicker = flatpickr("#slotPicker", {
+            enableTime: true,
+            mode: "range",
+            minDate: "today",
+            locale: "ru"
+        });
 
-            // Аутентификация
+        // Проверка прав мастера
+        async function checkMasterAccess() {
             try {
-                const authResponse = await fetch(`${backendUrl}/api/auth`, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ init_data: initData, hash: hash })
-                });
+                const response = await fetch(`${backendUrl}/api/is-master?tg_id=${currentUser.id}`);
+                const { is_master } = await response.json();
                 
-                if (!authResponse.ok) throw new Error('Auth failed');
-                
-                const { user_id } = await authResponse.json();
-                currentUser.id = user_id;
-                loadUserData(user_id);
-                
+                if (is_master) {
+                    document.getElementById('clientScreen').classList.remove('active');
+                    document.getElementById('masterScreen').classList.add('active');
+                } else {
+                    tg.showAlert("Вы не зарегистрированы как мастер!");
+                }
             } catch (error) {
-                tg.showAlert('Ошибка авторизации');
+                tg.showAlert("Ошибка доступа");
             }
         }
 
-        // Загрузка данных пользователя
-        async function loadUserData(userId) {
-            try {
-                const response = await fetch(`${backendUrl}/api/user-role?tg_id=${userId}`);
-                const { role } = await response.json();
-                document.getElementById('username').textContent = `@user_${userId}`;
-            } catch (error) {
-                console.error('Error loading user data:', error);
-            }
+        // Добавление слота
+        async function addSlot() {
+            const [start, end] = slotPicker.selectedDates;
+            const response = await fetch(`${backendUrl}/api/slots`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    master_id: currentUser.id,
+                    start: start.toISOString(),
+                    end: end.toISOString()
+                })
+            });
+            response.ok ? tg.showAlert("Слот добавлен!") : tg.showAlert("Ошибка!");
         }
 
         // Навигация
-        function showScreen(screenId) {
-            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-            document.getElementById(screenId).classList.add('active');
+        function showClientScreen() {
+            document.getElementById('masterScreen').classList.remove('active');
+            document.getElementById('clientScreen').classList.add('active');
         }
 
-        // Выбор города
-        function selectCity() {
-            currentCity = document.getElementById('citySelect').value;
-            if (!currentCity) return tg.showAlert('Выберите город');
-            showScreen('serviceScreen');
+        function showTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+            document.getElementById(tabId).classList.add('active');
         }
 
-        // Выбор услуги
-        async function selectService() {
-            currentService = document.getElementById('serviceSelect').value;
-            if (!currentService) return tg.showAlert('Выберите услугу');
-            
-            try {
-                const response = await fetch(
-                    `${backendUrl}/api/masters?city=${encodeURIComponent(currentCity)}&service=${currentService}`
-                );
-                
-                if (!response.ok) throw new Error('Server error');
-                
-                const masters = await response.json();
-                renderMasters(masters);
-                showScreen('mastersScreen');
-                
-            } catch (error) {
-                tg.showAlert('Ошибка загрузки данных');
-            }
-        }
-
-        // Отрисовка мастеров
-        function renderMasters(masters) {
-            const list = document.getElementById('mastersList');
-            document.getElementById('currentCity').textContent = currentCity;
-            document.getElementById('currentService').textContent = 
-                document.querySelector(`#serviceSelect option[value="${currentService}"]`).textContent;
-
-            list.innerHTML = masters.map(master => `
-                <div style="padding: 15px; margin: 10px 0; background: white; border-radius: 10px;">
-                    <h3>${master.name || 'Мастер'}</h3>
-                    <p>💰 Цена: ${master.price} руб.</p>
-                    <p>⏱ Длительность: ${master.duration} мин.</p>
-                    ${master.bio ? `<p>${master.bio}</p>` : ''}
-                </div>
-            `).join('');
-        }
-
-        document.addEventListener('DOMContentLoaded', initApp);
+        // Инициализация
+        tg.ready();
+        tg.expand();
+        currentUser.id = new URLSearchParams(window.location.search).get('user_id');
     </script>
 </body>
 </html>
